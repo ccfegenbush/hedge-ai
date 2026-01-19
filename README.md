@@ -9,6 +9,7 @@ An investment platform for generating, backtesting, and paper trading stock stra
 - **Backtesting Engine**: Run strategies against historical data with performance metrics
 - **Performance Metrics**: Sharpe ratio, Sortino ratio, max drawdown, win rate, and more
 - **CLI Interface**: Easy-to-use command line interface for running backtests
+- **REST API**: FastAPI-based API for web frontend integration
 
 ## Installation
 
@@ -47,11 +48,33 @@ Options:
   -l, --lookback INTEGER  Lookback period for momentum strategy (default: 20)
 ```
 
+### Start the API Server
+
+```bash
+uvicorn src.api.main:app --reload --port 8000
+```
+
+### API Endpoints
+
+- `GET /` - Health check
+- `GET /api/strategies` - List available strategies
+- `POST /api/backtest` - Run a backtest
+
+Example API request:
+```bash
+curl -X POST http://localhost:8000/api/backtest \
+  -H "Content-Type: application/json" \
+  -d '{"strategy": "momentum", "tickers": ["AAPL"], "start_date": "2024-01-01", "initial_capital": 10000}'
+```
+
 ## Project Structure
 
 ```
 hedge-ai/
 ├── src/
+│   ├── api/                   # FastAPI REST API
+│   │   ├── main.py            # API routes
+│   │   └── schemas.py         # Pydantic models
 │   ├── cli.py                 # CLI entry point
 │   ├── strategies/
 │   │   ├── base.py            # Abstract strategy interface
@@ -62,9 +85,6 @@ hedge-ai/
 │   ├── backtest/
 │   │   ├── engine.py          # Backtesting engine
 │   │   └── metrics.py         # Performance metrics
-│   ├── portfolio/
-│   │   ├── manager.py         # Portfolio state management
-│   │   └── paper_trader.py    # Paper trading execution
 │   └── models/
 │       └── schemas.py         # Data classes for trades, positions, etc.
 ├── tests/
