@@ -6,17 +6,25 @@ from fastapi.middleware.cors import CORSMiddleware
 from src.api.schemas import (
     BacktestRequest,
     BacktestResponse,
+    CompareStrategiesRequest,
+    CompareStrategiesResponse,
+    CustomBacktestRequest,
     ErrorResponse,
     MetricsResponse,
     PortfolioValuePoint,
     StrategiesResponse,
+    StrategyComparisonResult,
     StrategyInfo,
+    StrategyValidationRequest,
+    StrategyValidationResponse,
     TradeResponse,
 )
 from src.backtest.engine import BacktestEngine
 from src.backtest.metrics import calculate_all_metrics
 from src.data.yahoo import YahooFinanceProvider
 from src.strategies.momentum import MomentumStrategy
+from src.strategies.rule_based import RuleBasedStrategy
+from src.strategies.validator import validate_strategy_definition
 
 app = FastAPI(
     title="Hedge AI API",
@@ -165,6 +173,268 @@ async def run_backtest(request: BacktestRequest):
         trades=trades,
         portfolio_values=portfolio_values,
     )
+
+
+@app.post("/api/strategies/validate", response_model=StrategyValidationResponse)
+async def validate_strategy(request: StrategyValidationRequest):
+    """
+    Validate a custom strategy definition.
+    """
+    # Convert Pydantic model to dict for validator
+    definition_dict = request.definition.model_dump()
+
+    # Convert rules format to match validator expectations
+    rules = {}
+    if definition_dict.get("rules"):
+        if definition_dict["rules"].get("buy"):
+            rules["buy"] = definition_dict["rules"]["buy"]
+        if definition_dict["rules"].get("sell"):
+            rules["sell"] = definition_dict["rules"]["sell"]
+    definition_dict["rules"] = rules
+
+    is_valid, errors = validate_strategy_definition(definition_dict)
+
+    return StrategyValidationResponse(is_valid=is_valid, errors=errors)
+
+
+@app.post("/api/backtest/custom", response_model=BacktestResponse)
+async def run_custom_backtest(request: CustomBacktestRequest):
+    """
+    Run a backtest with a custom strategy definition.
+    """
+    # Convert Pydantic model to dict for RuleBasedStrategy
+    definition_dict = request.definition.model_dump()
+
+    # Convert rules format
+    rules = {}
+    if definition_dict.get("rules"):
+        if definition_dict["rules"].get("buy"):
+            rules["buy"] = definition_dict["rules"]["buy"]
+        if definition_dict["rules"].get("sell"):
+            rules["sell"] = definition_dict["rules"]["sell"]
+    definition_dict["rules"] = rules
+
+    # Validate strategy
+    is_valid, errors = validate_strategy_definition(definition_dict)
+    if not is_valid:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid strategy definition: {'; '.join(errors)}",
+        )
+
+    # Parse dates
+    try:
+        start_date = datetime.strptime(request.start_date, "%Y-%m-%d")
+        end_date = (
+            datetime.strptime(request.end_date, "%Y-%m-%d")
+            if request.end_date
+            else datetime.now()
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=f"Invalid date format: {e}")
+
+    # Fetch data
+    try:
+        provider = YahooFinanceProvider()
+        data = provider.get_multiple_tickers(request.tickers, start_date, end_date)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch market data: {e}")
+
+    if not data:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No data found for tickers: {request.tickers}",
+        )
+
+    # Create strategy
+    try:
+        strategy = RuleBasedStrategy(definition_dict)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    # Run backtest
+    engine = BacktestEngine(
+        initial_capital=request.initial_capital,
+        commission=request.commission,
+    )
+
+    if len(data) == 1:
+        ticker = list(data.keys())[0]
+        result = engine.run(strategy, data[ticker])
+    else:
+        result = engine.run_multiple(strategy, data)
+
+    # Calculate metrics
+    metrics = calculate_all_metrics(result)
+
+    # Format response
+    trades = [
+        TradeResponse(
+            ticker=t.ticker,
+            side=t.side.value,
+            quantity=t.quantity,
+            price=round(t.price, 2),
+            timestamp=t.timestamp.strftime("%Y-%m-%d"),
+            total_value=round(t.total_value, 2),
+        )
+        for t in result.trades
+    ]
+
+    portfolio_values = [
+        PortfolioValuePoint(
+            date=date.strftime("%Y-%m-%d"),
+            value=round(value, 2),
+        )
+        for date, value in result.portfolio_values.items()
+    ]
+
+    # Handle infinity for profit factor
+    profit_factor = metrics["profit_factor"]
+    if profit_factor == float("inf"):
+        profit_factor = "Infinity"
+
+    return BacktestResponse(
+        initial_capital=result.initial_capital,
+        final_value=round(result.final_value, 2),
+        metrics=MetricsResponse(
+            total_return_pct=round(metrics["total_return_pct"], 2),
+            cagr=round(metrics["cagr"], 2),
+            sharpe_ratio=round(metrics["sharpe_ratio"], 2),
+            sortino_ratio=round(metrics["sortino_ratio"], 2),
+            max_drawdown_pct=round(metrics["max_drawdown_pct"], 2),
+            win_rate_pct=round(metrics["win_rate_pct"], 1),
+            profit_factor=profit_factor,
+            num_trades=metrics["num_trades"],
+        ),
+        trades=trades,
+        portfolio_values=portfolio_values,
+    )
+
+
+@app.post("/api/backtest/compare", response_model=CompareStrategiesResponse)
+async def compare_strategies(request: CompareStrategiesRequest):
+    """
+    Compare multiple strategies side-by-side.
+    """
+    # Parse dates
+    try:
+        start_date = datetime.strptime(request.start_date, "%Y-%m-%d")
+        end_date = (
+            datetime.strptime(request.end_date, "%Y-%m-%d")
+            if request.end_date
+            else datetime.now()
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=f"Invalid date format: {e}")
+
+    # Fetch data once for all strategies
+    try:
+        provider = YahooFinanceProvider()
+        data = provider.get_multiple_tickers(request.tickers, start_date, end_date)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch market data: {e}")
+
+    if not data:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No data found for tickers: {request.tickers}",
+        )
+
+    results = []
+
+    for strategy_def in request.strategies:
+        # Convert Pydantic model to dict
+        definition_dict = strategy_def.model_dump()
+
+        # Convert rules format
+        rules = {}
+        if definition_dict.get("rules"):
+            if definition_dict["rules"].get("buy"):
+                rules["buy"] = definition_dict["rules"]["buy"]
+            if definition_dict["rules"].get("sell"):
+                rules["sell"] = definition_dict["rules"]["sell"]
+        definition_dict["rules"] = rules
+
+        # Validate strategy
+        is_valid, errors = validate_strategy_definition(definition_dict)
+        if not is_valid:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid strategy '{definition_dict.get('name', 'unnamed')}': {'; '.join(errors)}",
+            )
+
+        # Create strategy
+        try:
+            strategy = RuleBasedStrategy(definition_dict)
+        except ValueError as e:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Error creating strategy '{definition_dict.get('name', 'unnamed')}': {e}",
+            )
+
+        # Run backtest
+        engine = BacktestEngine(
+            initial_capital=request.initial_capital,
+            commission=request.commission,
+        )
+
+        if len(data) == 1:
+            ticker = list(data.keys())[0]
+            result = engine.run(strategy, data[ticker])
+        else:
+            result = engine.run_multiple(strategy, data)
+
+        # Calculate metrics
+        metrics = calculate_all_metrics(result)
+
+        # Format trades
+        trades = [
+            TradeResponse(
+                ticker=t.ticker,
+                side=t.side.value,
+                quantity=t.quantity,
+                price=round(t.price, 2),
+                timestamp=t.timestamp.strftime("%Y-%m-%d"),
+                total_value=round(t.total_value, 2),
+            )
+            for t in result.trades
+        ]
+
+        # Format portfolio values
+        portfolio_values = [
+            PortfolioValuePoint(
+                date=date.strftime("%Y-%m-%d"),
+                value=round(value, 2),
+            )
+            for date, value in result.portfolio_values.items()
+        ]
+
+        # Handle infinity for profit factor
+        profit_factor = metrics["profit_factor"]
+        if profit_factor == float("inf"):
+            profit_factor = "Infinity"
+
+        results.append(
+            StrategyComparisonResult(
+                name=definition_dict["name"],
+                initial_capital=result.initial_capital,
+                final_value=round(result.final_value, 2),
+                metrics=MetricsResponse(
+                    total_return_pct=round(metrics["total_return_pct"], 2),
+                    cagr=round(metrics["cagr"], 2),
+                    sharpe_ratio=round(metrics["sharpe_ratio"], 2),
+                    sortino_ratio=round(metrics["sortino_ratio"], 2),
+                    max_drawdown_pct=round(metrics["max_drawdown_pct"], 2),
+                    win_rate_pct=round(metrics["win_rate_pct"], 1),
+                    profit_factor=profit_factor,
+                    num_trades=metrics["num_trades"],
+                ),
+                trades=trades,
+                portfolio_values=portfolio_values,
+            )
+        )
+
+    return CompareStrategiesResponse(results=results)
 
 
 if __name__ == "__main__":
