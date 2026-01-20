@@ -195,3 +195,29 @@ class ErrorResponse(BaseModel):
     """Response schema for errors."""
     error: str
     detail: str | None = None
+
+
+# =============================================================================
+# Ticker Price Schemas
+# =============================================================================
+
+
+class TickerPricesRequest(BaseModel):
+    """Request schema for fetching ticker prices."""
+    tickers: list[str] = Field(..., min_length=1, description="List of ticker symbols")
+
+
+class TickerPrice(BaseModel):
+    """Price data for a single ticker."""
+    ticker: str
+    price: float
+    change_24h: float
+    change_percent_24h: float
+    previous_close: float
+    fetched_at: str
+
+
+class TickerPricesResponse(BaseModel):
+    """Response schema for ticker prices."""
+    prices: list[TickerPrice]
+    errors: list[str] = Field(default_factory=list)

@@ -17,6 +17,9 @@ from src.api.schemas import (
     StrategyInfo,
     StrategyValidationRequest,
     StrategyValidationResponse,
+    TickerPrice,
+    TickerPricesRequest,
+    TickerPricesResponse,
     TradeResponse,
 )
 from src.backtest.engine import BacktestEngine
@@ -435,6 +438,56 @@ async def compare_strategies(request: CompareStrategiesRequest):
         )
 
     return CompareStrategiesResponse(results=results)
+
+
+@app.post("/api/tickers/prices", response_model=TickerPricesResponse)
+async def get_ticker_prices(request: TickerPricesRequest):
+    """
+    Fetch current prices and 24h changes for a list of tickers.
+    Uses yfinance fast_info for quick price lookups.
+    """
+    import yfinance as yf
+
+    prices = []
+    errors = []
+    fetched_at = datetime.now().isoformat()
+
+    for ticker_symbol in request.tickers:
+        try:
+            ticker = yf.Ticker(ticker_symbol.upper())
+            info = ticker.fast_info
+
+            # Get current price and previous close
+            current_price = info.get("lastPrice") or info.get("regularMarketPrice", 0)
+            previous_close = info.get("previousClose", 0) or info.get(
+                "regularMarketPreviousClose", 0
+            )
+
+            # Calculate 24h change
+            if previous_close and previous_close > 0:
+                change_24h = current_price - previous_close
+                change_percent_24h = (change_24h / previous_close) * 100
+            else:
+                change_24h = 0
+                change_percent_24h = 0
+
+            if current_price and current_price > 0:
+                prices.append(
+                    TickerPrice(
+                        ticker=ticker_symbol.upper(),
+                        price=round(current_price, 2),
+                        change_24h=round(change_24h, 2),
+                        change_percent_24h=round(change_percent_24h, 2),
+                        previous_close=round(previous_close, 2),
+                        fetched_at=fetched_at,
+                    )
+                )
+            else:
+                errors.append(f"No price data for {ticker_symbol}")
+        except Exception as e:
+            errors.append(f"Error fetching {ticker_symbol}: {str(e)}")
+
+    return TickerPricesResponse(prices=prices, errors=errors)
 
 
 if __name__ == "__main__":
