@@ -83,7 +83,11 @@ hedge-ai-worktrees/             # Feature worktrees
 
 **Starting a New Feature:**
 ```bash
-# From main repo, create worktrees directory if needed
+# From main repo, pull latest changes first
+git checkout main
+git pull origin main
+
+# Create worktrees directory if needed
 mkdir -p ../hedge-ai-worktrees
 
 # Create new worktree with feature branch
@@ -94,7 +98,7 @@ cd ../hedge-ai-worktrees/<feature-name>
 ```
 
 **Feature Development Process:**
-1. Create worktree (see above)
+1. Pull latest main and create worktree (see above)
 2. Work in the worktree directory (new terminal tab)
 3. Make changes and run tests: `python -m pytest tests/ -v`
 4. Commit changes (wait for user approval)
