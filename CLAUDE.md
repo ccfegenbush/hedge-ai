@@ -64,3 +64,48 @@ python -m src.cli backtest --strategy momentum --tickers AAPL --start 2024-01-01
 ## Frontend
 
 The frontend is a separate Next.js project: https://github.com/ccfegenbush/hedge-ai-ui
+
+---
+
+## Code Standards
+
+### Git Worktree Workflow (Default)
+
+Use git worktrees to work on multiple branches simultaneously in different terminal tabs.
+
+**Directory Structure:**
+```
+hedge-ai/                       # Main repo (stays on main)
+hedge-ai-worktrees/             # Feature worktrees
+  ├── add-new-strategy/         # feature/add-new-strategy branch
+  └── fix-backtest-bug/         # feature/fix-backtest-bug branch
+```
+
+**Starting a New Feature:**
+```bash
+# From main repo, create worktrees directory if needed
+mkdir -p ../hedge-ai-worktrees
+
+# Create new worktree with feature branch
+git worktree add ../hedge-ai-worktrees/<feature-name> -b feature/<feature-name>
+
+# Then open new terminal tab and:
+cd ../hedge-ai-worktrees/<feature-name>
+```
+
+**Feature Development Process:**
+1. Create worktree (see above)
+2. Work in the worktree directory (new terminal tab)
+3. Make changes and run tests: `python -m pytest tests/ -v`
+4. Commit changes (wait for user approval)
+5. Push branch (wait for user approval)
+6. Create PR via `gh pr create` (wait for user approval)
+7. Merge PR via `gh pr merge` (wait for user approval)
+8. Cleanup worktree: `git worktree remove ../hedge-ai-worktrees/<feature-name>`
+
+### Git Rules
+- Never commit without explicitly asking for permission first
+- Never push without explicitly asking for permission first
+- Never merge PRs without explicitly asking for permission first
+- Branch names must follow pattern: `feature/description` or `fix/description`
+- Commit messages must be descriptive, not generic ("fix bug" is not acceptable)
