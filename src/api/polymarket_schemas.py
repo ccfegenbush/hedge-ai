@@ -331,6 +331,88 @@ class PriceHistoryResponse(BaseModel):
 
 
 # =============================================================================
+# Arbitrage Schemas
+# =============================================================================
+
+
+class ArbitrageOpportunityResponse(BaseModel):
+    """Response schema for an arbitrage opportunity."""
+
+    market_id: str
+    market_question: str
+    yes_token_id: str
+    no_token_id: str
+    yes_ask_price: float
+    no_ask_price: float
+    combined_price: float
+    edge_pct: float = Field(description="Edge as percentage")
+    yes_liquidity_usdc: float
+    no_liquidity_usdc: float
+    max_trade_size_usdc: float
+    expected_profit_usdc: float
+    expected_profit_pct: float
+    hours_until_resolution: Optional[float] = None
+    market_volume: float = 0.0
+    confidence: float
+    timestamp: str
+
+
+class TradeRecommendationResponse(BaseModel):
+    """Response schema for an arbitrage trade recommendation."""
+
+    market_id: str
+    action: str = Field(description="buy_yes_and_no")
+    yes_token_id: str
+    no_token_id: str
+    yes_amount_usdc: float
+    no_amount_usdc: float
+    total_amount_usdc: float
+    expected_profit_usdc: float
+    expected_profit_pct: float
+    reason: str
+    is_dry_run: bool
+    timestamp: str
+
+
+class ArbitrageScanRequest(BaseModel):
+    """Request schema for running an arbitrage scan."""
+
+    available_capital: float = Field(
+        default=10000.0, ge=100, description="Capital available for trading"
+    )
+    max_markets: int = Field(
+        default=100, ge=1, le=500, description="Maximum markets to scan"
+    )
+    arb_threshold: float = Field(
+        default=0.99, ge=0.9, le=1.0, description="Maximum combined price threshold"
+    )
+    min_liquidity_usdc: float = Field(
+        default=100.0, ge=10, description="Minimum liquidity per side"
+    )
+    max_trade_size_pct: float = Field(
+        default=0.05, ge=0.01, le=0.5, description="Max trade size as % of capital"
+    )
+    min_trade_size_usdc: float = Field(
+        default=10.0, ge=1, description="Minimum trade size to recommend"
+    )
+    dry_run: bool = Field(
+        default=True, description="If true, only scan without recommending trades"
+    )
+
+
+class ArbitrageScanResponse(BaseModel):
+    """Response schema for arbitrage scan results."""
+
+    opportunities: list[ArbitrageOpportunityResponse]
+    recommendations: list[TradeRecommendationResponse]
+    total_opportunities: int
+    total_markets_scanned: int
+    total_potential_profit_usdc: float
+    scan_timestamp: str
+    is_dry_run: bool
+
+
+# =============================================================================
 # Order Book Schemas
 # =============================================================================
 

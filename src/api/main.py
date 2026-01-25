@@ -23,6 +23,9 @@ from src.api.schemas import (
     TradeResponse,
 )
 from src.api.polymarket_schemas import (
+    ArbitrageOpportunityResponse,
+    ArbitrageScanRequest,
+    ArbitrageScanResponse,
     GenerateSignalsRequest,
     MarketResponse,
     MarketSearchRequest,
@@ -40,6 +43,7 @@ from src.api.polymarket_schemas import (
     PricePointResponse,
     SentimentReadingResponse,
     SignalsResponse,
+    TradeRecommendationResponse,
     WhaleActivityRequest,
     WhaleActivityResponse,
     WhaleWalletsResponse,
@@ -966,8 +970,123 @@ async def list_polymarket_strategies():
                     "min_signal_strength": "0.3",
                 },
             ),
+            PolymarketStrategyInfo(
+                name="arbitrage",
+                description=(
+                    "Pure arbitrage strategy exploiting price inefficiencies "
+                    "where Yes + No prices sum to less than $1.00"
+                ),
+                signal_sources=["order_book"],
+                default_weights={"arbitrage": 1.0},
+                parameters={
+                    "arb_threshold": "0.99",
+                    "min_liquidity_usdc": "100",
+                    "max_trade_size_pct": "0.05",
+                    "dry_run": "true",
+                },
+            ),
         ]
     )
+
+
+@app.post("/api/polymarket/arbitrage/scan", response_model=ArbitrageScanResponse)
+async def scan_arbitrage_opportunities(request: ArbitrageScanRequest):
+    """
+    Scan active Polymarket markets for arbitrage opportunities.
+
+    This endpoint identifies binary markets where the combined cost of
+    Yes + No shares is less than $1.00, representing a guaranteed profit
+    opportunity at market resolution.
+    """
+    from datetime import datetime
+
+    from src.data.polymarket_provider import PolymarketProvider
+    from src.strategies.polymarket_arbitrage import ArbitrageStrategy
+
+    provider = PolymarketProvider()
+
+    try:
+        # Initialize strategy
+        strategy = ArbitrageStrategy(
+            provider=provider,
+            arb_threshold=request.arb_threshold,
+            min_liquidity_usdc=request.min_liquidity_usdc,
+            max_trade_size_pct=request.max_trade_size_pct,
+            min_trade_size_usdc=request.min_trade_size_usdc,
+            dry_run=request.dry_run,
+        )
+
+        # Scan for opportunities
+        opportunities = await strategy.scan_all_markets(
+            available_capital=request.available_capital,
+            max_markets=request.max_markets,
+        )
+
+        # Generate trade recommendations
+        recommendations = []
+        if not request.dry_run and opportunities:
+            raw_recommendations = strategy.generate_trade_recommendations(
+                opportunities=opportunities,
+                available_capital=request.available_capital,
+                max_recommendations=5,
+            )
+            recommendations = [
+                TradeRecommendationResponse(
+                    market_id=rec.market_id,
+                    action=rec.action,
+                    yes_token_id=rec.yes_token_id,
+                    no_token_id=rec.no_token_id,
+                    yes_amount_usdc=rec.yes_amount_usdc,
+                    no_amount_usdc=rec.no_amount_usdc,
+                    total_amount_usdc=rec.total_amount_usdc,
+                    expected_profit_usdc=rec.expected_profit_usdc,
+                    expected_profit_pct=rec.expected_profit_pct,
+                    reason=rec.reason,
+                    is_dry_run=rec.is_dry_run,
+                    timestamp=rec.timestamp.isoformat(),
+                )
+                for rec in raw_recommendations
+            ]
+
+        # Convert opportunities to response format
+        opportunity_responses = [
+            ArbitrageOpportunityResponse(
+                market_id=opp.market_id,
+                market_question=opp.market_question,
+                yes_token_id=opp.yes_token_id,
+                no_token_id=opp.no_token_id,
+                yes_ask_price=opp.yes_ask_price,
+                no_ask_price=opp.no_ask_price,
+                combined_price=opp.combined_price,
+                edge_pct=opp.edge_pct,
+                yes_liquidity_usdc=opp.yes_liquidity_usdc,
+                no_liquidity_usdc=opp.no_liquidity_usdc,
+                max_trade_size_usdc=opp.max_trade_size_usdc,
+                expected_profit_usdc=opp.expected_profit_usdc,
+                expected_profit_pct=opp.expected_profit_pct,
+                hours_until_resolution=opp.hours_until_resolution,
+                market_volume=opp.market_volume,
+                confidence=opp.confidence,
+                timestamp=opp.timestamp.isoformat(),
+            )
+            for opp in opportunities
+        ]
+
+        # Calculate total potential profit
+        total_profit = sum(opp.expected_profit_usdc for opp in opportunities)
+
+        return ArbitrageScanResponse(
+            opportunities=opportunity_responses,
+            recommendations=recommendations,
+            total_opportunities=len(opportunities),
+            total_markets_scanned=request.max_markets,
+            total_potential_profit_usdc=total_profit,
+            scan_timestamp=datetime.now().isoformat(),
+            is_dry_run=request.dry_run,
+        )
+
+    finally:
+        await provider.close()
 
 
 if __name__ == "__main__":
