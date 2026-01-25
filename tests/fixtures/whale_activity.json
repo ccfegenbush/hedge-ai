@@ -1,0 +1,85 @@
+{
+  "whale_wallets": [
+    {
+      "address": "0x1111222233334444555566667777888899990000",
+      "label": "Polymarket Whale #1",
+      "total_volume": 5000000,
+      "win_rate": 0.68,
+      "first_seen": "2023-06-01T00:00:00Z",
+      "last_active": "2024-01-10T15:30:00Z"
+    },
+    {
+      "address": "0xaaaa111122223333444455556666777788889999",
+      "label": "Smart Money Alpha",
+      "total_volume": 3500000,
+      "win_rate": 0.72,
+      "first_seen": "2023-08-15T00:00:00Z",
+      "last_active": "2024-01-10T12:00:00Z"
+    },
+    {
+      "address": "0xbbbb222233334444555566667777888899990000",
+      "label": "Institutional Player",
+      "total_volume": 8000000,
+      "win_rate": 0.65,
+      "first_seen": "2023-01-01T00:00:00Z",
+      "last_active": "2024-01-10T18:45:00Z"
+    }
+  ],
+  "transactions": [
+    {
+      "tx_hash": "0xabc123def456789012345678901234567890abcdef123456789012345678901234",
+      "wallet_address": "0x1111222233334444555566667777888899990000",
+      "market_id": "0x1234567890abcdef1234567890abcdef12345678",
+      "outcome_id": "yes",
+      "transaction_type": "buy",
+      "amount": 50000,
+      "price": 0.62,
+      "timestamp": "2024-01-08T10:30:00Z",
+      "block_number": 52000000
+    },
+    {
+      "tx_hash": "0xdef456789012345678901234567890abcdef123456789012345678901234567890",
+      "wallet_address": "0xaaaa111122223333444455556666777788889999",
+      "market_id": "0x1234567890abcdef1234567890abcdef12345678",
+      "outcome_id": "yes",
+      "transaction_type": "buy",
+      "amount": 75000,
+      "price": 0.63,
+      "timestamp": "2024-01-09T14:15:00Z",
+      "block_number": 52010000
+    },
+    {
+      "tx_hash": "0x123456789012345678901234567890abcdef1234567890123456789012345678ab",
+      "wallet_address": "0xbbbb222233334444555566667777888899990000",
+      "market_id": "0x1234567890abcdef1234567890abcdef12345678",
+      "outcome_id": "yes",
+      "transaction_type": "sell",
+      "amount": 25000,
+      "price": 0.64,
+      "timestamp": "2024-01-10T09:00:00Z",
+      "block_number": 52020000
+    },
+    {
+      "tx_hash": "0x789012345678901234567890abcdef12345678901234567890123456789012cd",
+      "wallet_address": "0x1111222233334444555566667777888899990000",
+      "market_id": "0xabcdef1234567890abcdef1234567890abcdef12",
+      "outcome_id": "yes",
+      "transaction_type": "buy",
+      "amount": 100000,
+      "price": 0.40,
+      "timestamp": "2024-02-18T16:45:00Z",
+      "block_number": 52500000
+    }
+  ],
+  "whale_flows": [
+    {
+      "market_id": "0x1234567890abcdef1234567890abcdef12345678",
+      "period_start": "2024-01-08T00:00:00Z",
+      "period_end": "2024-01-10T23:59:59Z",
+      "net_flow": 100000,
+      "buy_volume": 125000,
+      "sell_volume": 25000,
+      "unique_wallets": 3
+    }
+  ]
+}

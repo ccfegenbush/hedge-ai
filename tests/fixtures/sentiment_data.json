@@ -1,0 +1,105 @@
+{
+  "sentiment_readings": [
+    {
+      "market_id": "0x1234567890abcdef1234567890abcdef12345678",
+      "readings": [
+        {
+          "timestamp": "2024-01-01T00:00:00Z",
+          "score": 0.2,
+          "volume": 50,
+          "sample_posts": [
+            "Market looking bullish today",
+            "Sentiment shifting positive",
+            "Good momentum building"
+          ]
+        },
+        {
+          "timestamp": "2024-01-01T01:00:00Z",
+          "score": 0.25,
+          "volume": 65,
+          "sample_posts": [
+            "Strong conviction from analysts",
+            "Market continues upward trend"
+          ]
+        },
+        {
+          "timestamp": "2024-01-01T02:00:00Z",
+          "score": 0.35,
+          "volume": 80,
+          "sample_posts": [
+            "Major news supporting YES outcome",
+            "Analysts revising predictions upward"
+          ]
+        },
+        {
+          "timestamp": "2024-01-01T03:00:00Z",
+          "score": 0.40,
+          "volume": 95,
+          "sample_posts": [
+            "Bullish sentiment continues",
+            "Strong buying pressure"
+          ]
+        },
+        {
+          "timestamp": "2024-01-01T04:00:00Z",
+          "score": 0.38,
+          "volume": 70,
+          "sample_posts": [
+            "Some profit taking but overall positive",
+            "Trend remains intact"
+          ]
+        }
+      ]
+    },
+    {
+      "market_id": "0xabcdef1234567890abcdef1234567890abcdef12",
+      "readings": [
+        {
+          "timestamp": "2024-02-15T00:00:00Z",
+          "score": -0.1,
+          "volume": 30,
+          "sample_posts": [
+            "Uncertainty about crypto prices",
+            "Mixed signals from market"
+          ]
+        },
+        {
+          "timestamp": "2024-02-15T01:00:00Z",
+          "score": 0.05,
+          "volume": 45,
+          "sample_posts": [
+            "Some optimism returning",
+            "Whale accumulation spotted"
+          ]
+        },
+        {
+          "timestamp": "2024-02-15T02:00:00Z",
+          "score": 0.15,
+          "volume": 55,
+          "sample_posts": [
+            "BTC showing strength",
+            "Technical breakout possible"
+          ]
+        }
+      ]
+    }
+  ],
+  "influencer_posts": [
+    {
+      "account_handle": "NateSilver538",
+      "market_id": "0x1234567890abcdef1234567890abcdef12345678",
+      "post_text": "Updated model shows 65% probability for candidate A",
+      "sentiment_score": 0.45,
+      "prediction_extracted": "YES at 65%",
+      "timestamp": "2024-01-05T12:00:00Z"
+    },
+    {
+      "account_handle": "CryptoAnalyst",
+      "market_id": "0xabcdef1234567890abcdef1234567890abcdef12",
+      "post_text": "Bitcoin macro setup looks promising, $100k possible",
+      "sentiment_score": 0.60,
+      "prediction_extracted": "YES",
+      "timestamp": "2024-02-20T14:30:00Z"
+    }
+  ]
+}

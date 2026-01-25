@@ -22,6 +22,28 @@ from src.api.schemas import (
     TickerPricesResponse,
     TradeResponse,
 )
+from src.api.polymarket_schemas import (
+    GenerateSignalsRequest,
+    MarketResponse,
+    MarketSearchRequest,
+    MarketsListResponse,
+    MarketSentimentRequest,
+    MarketSentimentResponse,
+    OrderBookResponse,
+    OutcomeResponse,
+    PolymarketBacktestRequest,
+    PolymarketBacktestResponse,
+    PolymarketStrategiesResponse,
+    PolymarketStrategyInfo,
+    PriceHistoryRequest,
+    PriceHistoryResponse,
+    PricePointResponse,
+    SentimentReadingResponse,
+    SignalsResponse,
+    WhaleActivityRequest,
+    WhaleActivityResponse,
+    WhaleWalletsResponse,
+)
 from src.backtest.engine import BacktestEngine
 from src.backtest.metrics import calculate_all_metrics
 from src.data.yahoo import YahooFinanceProvider
@@ -488,6 +510,464 @@ async def get_ticker_prices(request: TickerPricesRequest):
             errors.append(f"Error fetching {ticker_symbol}: {str(e)}")
 
     return TickerPricesResponse(prices=prices, errors=errors)
+
+
+# =============================================================================
+# Polymarket Endpoints
+# =============================================================================
+
+
+@app.get("/api/polymarket/markets", response_model=MarketsListResponse)
+async def list_polymarket_markets(
+    category: str | None = None,
+    limit: int = 100,
+    offset: int = 0,
+):
+    """
+    List active Polymarket prediction markets.
+
+    Args:
+        category: Optional category filter (politics, sports, crypto, etc.)
+        limit: Maximum number of markets to return
+        offset: Pagination offset
+    """
+    from src.data.polymarket_provider import PolymarketProvider
+    from src.models.polymarket_schemas import MarketCategory
+
+    provider = PolymarketProvider()
+
+    try:
+        # Parse category if provided
+        cat_filter = None
+        if category:
+            try:
+                cat_filter = MarketCategory(category.lower())
+            except ValueError:
+                pass  # Ignore invalid category
+
+        markets = await provider.get_active_markets(
+            category=cat_filter,
+            limit=limit,
+            offset=offset,
+        )
+
+        market_responses = []
+        for m in markets:
+            market_responses.append(
+                MarketResponse(
+                    condition_id=m.condition_id,
+                    question=m.question,
+                    description=m.description,
+                    category=m.category.value,
+                    status=m.status.value,
+                    outcomes=[
+                        OutcomeResponse(
+                            outcome_id=o.outcome_id,
+                            name=o.name,
+                            price=o.price,
+                            token_id=o.token_id,
+                        )
+                        for o in m.outcomes
+                    ],
+                    volume=m.volume,
+                    liquidity=m.liquidity,
+                    created_at=m.created_at.isoformat(),
+                    end_date=m.end_date.isoformat() if m.end_date else None,
+                    tags=m.tags,
+                    image_url=m.image_url,
+                    is_binary=m.is_binary,
+                    yes_price=m.yes_price,
+                )
+            )
+
+        return MarketsListResponse(
+            markets=market_responses,
+            total=len(market_responses),
+            offset=offset,
+            limit=limit,
+        )
+
+    finally:
+        await provider.close()
+
+
+@app.get("/api/polymarket/markets/{market_id}", response_model=MarketResponse)
+async def get_polymarket_market(market_id: str):
+    """
+    Get details for a specific Polymarket market.
+
+    Args:
+        market_id: The market's condition ID
+    """
+    from src.data.polymarket_provider import PolymarketProvider
+    from src.exceptions import MarketNotFoundError
+
+    provider = PolymarketProvider()
+
+    try:
+        market = await provider.get_market_by_id(market_id)
+
+        return MarketResponse(
+            condition_id=market.condition_id,
+            question=market.question,
+            description=market.description,
+            category=market.category.value,
+            status=market.status.value,
+            outcomes=[
+                OutcomeResponse(
+                    outcome_id=o.outcome_id,
+                    name=o.name,
+                    price=o.price,
+                    token_id=o.token_id,
+                )
+                for o in market.outcomes
+            ],
+            volume=market.volume,
+            liquidity=market.liquidity,
+            created_at=market.created_at.isoformat(),
+            end_date=market.end_date.isoformat() if market.end_date else None,
+            tags=market.tags,
+            image_url=market.image_url,
+            is_binary=market.is_binary,
+            yes_price=market.yes_price,
+        )
+
+    except MarketNotFoundError:
+        raise HTTPException(status_code=404, detail=f"Market not found: {market_id}")
+    finally:
+        await provider.close()
+
+
+@app.post("/api/polymarket/markets/search", response_model=MarketsListResponse)
+async def search_polymarket_markets(request: MarketSearchRequest):
+    """
+    Search Polymarket markets by keyword.
+    """
+    from src.data.polymarket_provider import PolymarketProvider
+
+    provider = PolymarketProvider()
+
+    try:
+        markets = await provider.search_markets(
+            query=request.query,
+            limit=request.limit,
+        )
+
+        market_responses = []
+        for m in markets:
+            market_responses.append(
+                MarketResponse(
+                    condition_id=m.condition_id,
+                    question=m.question,
+                    description=m.description,
+                    category=m.category.value,
+                    status=m.status.value,
+                    outcomes=[
+                        OutcomeResponse(
+                            outcome_id=o.outcome_id,
+                            name=o.name,
+                            price=o.price,
+                            token_id=o.token_id,
+                        )
+                        for o in m.outcomes
+                    ],
+                    volume=m.volume,
+                    liquidity=m.liquidity,
+                    created_at=m.created_at.isoformat(),
+                    end_date=m.end_date.isoformat() if m.end_date else None,
+                    tags=m.tags,
+                    image_url=m.image_url,
+                    is_binary=m.is_binary,
+                    yes_price=m.yes_price,
+                )
+            )
+
+        return MarketsListResponse(
+            markets=market_responses,
+            total=len(market_responses),
+            offset=0,
+            limit=request.limit,
+        )
+
+    finally:
+        await provider.close()
+
+
+@app.post("/api/polymarket/signals", response_model=SignalsResponse)
+async def generate_polymarket_signals(request: GenerateSignalsRequest):
+    """
+    Generate trading signals for Polymarket markets.
+
+    Combines sentiment, whale tracking, and momentum signals
+    based on the specified weights.
+    """
+    # TODO: Implement when strategy layer is complete
+    # For now, return placeholder response
+    from datetime import datetime
+
+    from src.api.polymarket_schemas import CompositeSignalResponse, SignalComponentResponse
+
+    signals = []
+    for market_id in request.market_ids:
+        components = []
+
+        if request.include_sentiment:
+            components.append(
+                SignalComponentResponse(
+                    source="sentiment",
+                    value=0.0,  # Neutral - no data yet
+                    confidence=0.0,
+                    metadata={"status": "mock_data"},
+                )
+            )
+
+        if request.include_whale:
+            components.append(
+                SignalComponentResponse(
+                    source="whale",
+                    value=0.0,
+                    confidence=0.0,
+                    metadata={"status": "mock_data"},
+                )
+            )
+
+        if request.include_momentum:
+            components.append(
+                SignalComponentResponse(
+                    source="momentum",
+                    value=0.0,
+                    confidence=0.0,
+                    metadata={"status": "mock_data"},
+                )
+            )
+
+        signals.append(
+            CompositeSignalResponse(
+                market_id=market_id,
+                direction="hold",
+                strength=0.0,
+                components=components,
+                timestamp=datetime.now().isoformat(),
+                metadata={"status": "mock_data"},
+            )
+        )
+
+    return SignalsResponse(
+        signals=signals,
+        generated_at=datetime.now().isoformat(),
+    )
+
+
+@app.get("/api/polymarket/signals/{market_id}", response_model=SignalsResponse)
+async def get_market_signals(market_id: str):
+    """
+    Get current signals for a specific market.
+    """
+    from datetime import datetime
+
+    from src.api.polymarket_schemas import CompositeSignalResponse, SignalComponentResponse
+
+    # TODO: Implement when strategy layer is complete
+    return SignalsResponse(
+        signals=[
+            CompositeSignalResponse(
+                market_id=market_id,
+                direction="hold",
+                strength=0.0,
+                components=[
+                    SignalComponentResponse(
+                        source="sentiment",
+                        value=0.0,
+                        confidence=0.0,
+                        metadata={"status": "mock_data"},
+                    ),
+                    SignalComponentResponse(
+                        source="whale",
+                        value=0.0,
+                        confidence=0.0,
+                        metadata={"status": "mock_data"},
+                    ),
+                    SignalComponentResponse(
+                        source="momentum",
+                        value=0.0,
+                        confidence=0.0,
+                        metadata={"status": "mock_data"},
+                    ),
+                ],
+                timestamp=datetime.now().isoformat(),
+                metadata={"status": "mock_data"},
+            )
+        ],
+        generated_at=datetime.now().isoformat(),
+    )
+
+
+@app.get("/api/polymarket/whales", response_model=WhaleWalletsResponse)
+async def list_whale_wallets():
+    """
+    List tracked whale wallets.
+    """
+    from src.api.polymarket_schemas import WhaleWalletResponse
+
+    # TODO: Implement when whale tracker is complete
+    return WhaleWalletsResponse(
+        wallets=[
+            WhaleWalletResponse(
+                address="0x1234...abcd",
+                label="Whale #1 (Mock)",
+                total_volume=1000000.0,
+                win_rate=0.65,
+                first_seen="2024-01-01T00:00:00Z",
+                last_active="2024-01-20T00:00:00Z",
+            ),
+        ],
+        total=1,
+    )
+
+
+@app.post("/api/polymarket/whales/activity", response_model=WhaleActivityResponse)
+async def get_whale_activity(request: WhaleActivityRequest):
+    """
+    Get recent whale trading activity.
+    """
+    from src.api.polymarket_schemas import WhaleTransactionResponse
+
+    # TODO: Implement when whale tracker is complete
+    return WhaleActivityResponse(
+        transactions=[
+            WhaleTransactionResponse(
+                tx_hash="0xabc123...",
+                wallet_address="0x1234...abcd",
+                market_id=request.market_id or "mock_market",
+                outcome_id="yes",
+                transaction_type="buy",
+                amount=50000.0,
+                price=0.65,
+                timestamp="2024-01-20T12:00:00Z",
+            ),
+        ],
+        net_flow=50000.0,
+        buy_volume=50000.0,
+        sell_volume=0.0,
+        unique_wallets=1,
+    )
+
+
+@app.get("/api/polymarket/sentiment/{market_id}", response_model=MarketSentimentResponse)
+async def get_market_sentiment(
+    market_id: str,
+    start_date: str | None = None,
+    end_date: str | None = None,
+):
+    """
+    Get sentiment data for a specific market.
+    """
+    from datetime import datetime
+
+    # TODO: Implement when sentiment provider is complete
+    return MarketSentimentResponse(
+        market_id=market_id,
+        current_score=0.0,
+        readings=[
+            SentimentReadingResponse(
+                market_id=market_id,
+                timestamp=datetime.now().isoformat(),
+                score=0.0,
+                volume=0,
+                sample_posts=[],
+            )
+        ],
+        trend="stable",
+    )
+
+
+@app.post("/api/polymarket/backtest", response_model=PolymarketBacktestResponse)
+async def run_polymarket_backtest(request: PolymarketBacktestRequest):
+    """
+    Run a backtest on Polymarket markets.
+    """
+    from datetime import datetime
+
+    from src.api.polymarket_schemas import (
+        PolymarketMetricsResponse,
+        PolymarketPortfolioValuePoint,
+        PolymarketTradeResponse,
+    )
+
+    # TODO: Implement when backtest engine is complete
+    # Return placeholder response
+    return PolymarketBacktestResponse(
+        initial_capital=request.initial_capital,
+        final_value=request.initial_capital,  # No trades = no change
+        metrics=PolymarketMetricsResponse(
+            total_return_pct=0.0,
+            sharpe_ratio=0.0,
+            max_drawdown_pct=0.0,
+            brier_score=0.0,
+            calibration_score=0.0,
+            resolution_accuracy_pct=0.0,
+            average_hold_duration_hours=0.0,
+            edge_captured_pct=0.0,
+            markets_traded=0,
+            win_count=0,
+            loss_count=0,
+        ),
+        trades=[],
+        portfolio_values=[
+            PolymarketPortfolioValuePoint(
+                date=request.start_date,
+                value=request.initial_capital,
+            ),
+        ],
+        strategy_used=request.strategy,
+        markets_analyzed=len(request.market_ids),
+    )
+
+
+@app.get("/api/polymarket/strategies", response_model=PolymarketStrategiesResponse)
+async def list_polymarket_strategies():
+    """
+    List available Polymarket trading strategies.
+    """
+    return PolymarketStrategiesResponse(
+        strategies=[
+            PolymarketStrategyInfo(
+                name="sentiment",
+                description="Trade based on X/Twitter sentiment analysis",
+                signal_sources=["sentiment"],
+                default_weights={"sentiment": 1.0},
+                parameters={"lookback_hours": "24"},
+            ),
+            PolymarketStrategyInfo(
+                name="whale",
+                description="Follow large wallet trading activity",
+                signal_sources=["whale"],
+                default_weights={"whale": 1.0},
+                parameters={"min_transaction_size": "10000"},
+            ),
+            PolymarketStrategyInfo(
+                name="momentum",
+                description="Trade based on price momentum and order book dynamics",
+                signal_sources=["momentum"],
+                default_weights={"momentum": 1.0},
+                parameters={"momentum_period": "24h"},
+            ),
+            PolymarketStrategyInfo(
+                name="composite",
+                description="Combined strategy using all three signal sources",
+                signal_sources=["sentiment", "whale", "momentum"],
+                default_weights={
+                    "sentiment": 0.3,
+                    "whale": 0.4,
+                    "momentum": 0.3,
+                },
+                parameters={
+                    "combination_method": "weighted",
+                    "min_signal_strength": "0.3",
+                },
+            ),
+        ]
+    )
 
 
 if __name__ == "__main__":
